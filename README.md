@@ -1,2 +1,2 @@
 # black-box-optimization
-Knowledge transfer in black box optimization
+A few examples of black box optimization, solved with different methods. 

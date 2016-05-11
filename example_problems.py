@@ -6,8 +6,7 @@ import math
 import numpy as np
 import random
 from sklearn.svm import SVR, SVC, LinearSVC
-from mnist_py import MNIST
-
+from mnist_reader import MNIST
 
 class MnistSubsetLinearClassification():
 
@@ -75,7 +74,6 @@ class MnistSubsetLinearClassification():
         
         except BaseException:
             return 0.0
-
 
 class MnistSubsetClassification():
 
@@ -187,51 +185,3 @@ class ArtificialRegression():
         score = clsf.score(self.Xv, self.Yv)
         
         return score
-
-class Test1():
-    def __init__(self):
-        self.name = "Test all categories"
-        self.bounds = {'A':{
-                            'type':'real',
-                            'bound':[0.0,5.0]
-                            },
-                       'B':{
-                            'type':'integer',
-                            'bound':[0,5]
-                            },
-                       'C':{
-                            'type':'category',
-                            'bound':['1','2','3','4','5']
-                            }
-                       }
-    def obj(self, config):
-        res = 0.0
-        res += math.sin(config['A'])
-        res += math.cos(config['B'])
-        res += math.sin(float(config['C'])*2)
-        return res/3
-
-class Test2():
-    def __init__(self):
-        bounds = {}
-        solutn = {}
-        self.size = 5
-        keys = [unicode(v) for v in range(self.size)]
-        for key in keys:
-            bounds[key] = {'type':'real', 'bound':[0.0, 1.0]}
-            solutn[key] = 0.25 # random.uniform(0.0,1.0)
-        self.bounds = bounds
-        self.solutn = solutn
-
-    def obj(self, p):
-        result = 0;
-        for key in p:
-            result += - ( np.sin( p[key] - self.solutn[key] ) ) ** 2
-        return result / self.size
-    
-    def obj_abs(self, p):
-        result = 0;
-        for key in p:
-            result += - abs( np.sin( p[key] - self.solutn[key] ) )
-        return result / self.size
-        

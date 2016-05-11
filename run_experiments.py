@@ -27,7 +27,7 @@ def test_method(method, bounds, obj, N):
 
 totest = [bc.bayesian_choice, bc.genetic_choice, bc.random_choice]
 
-tests = [ex.MnistSubsetLinearClassification]
+tests = [ ex.ArtificialRegression, ex.MnistSubsetLinearClassification]
 
 for testc in tests:
     N = 5

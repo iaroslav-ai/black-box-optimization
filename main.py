@@ -7,43 +7,28 @@ import example_problems as ex
 import backend as bc
 import numpy as np
 
-def test_method(method, bounds, obj, N):
-    
-    # initialize
-    data = bc.extend_data(None, None, None)
-    
-    for i in range(N):
-        choice, tosave = method(data, bounds)
-        #print choice
-        val = obj(choice)
-        data = bc.extend_data(data, tosave, val)
-        
-        res = bc.select_best(data)
-        print method.__name__, "iter", i, 'perf:', res[1]
-       
-        
-    res = bc.select_best(data)
-    return res[1]    
-
+# methods of black box optimization to try
 totest = [bc.bayesian_choice, bc.genetic_choice, bc.random_choice]
 
+# classes of test problems to solve
 tests = [ ex.ArtificialRegression, ex.MnistSubsetLinearClassification]
 
 for testc in tests:
-    N = 5
+    
+    N = 20 # max number of evals
+    R = 10 # number of samples from certain test distribution to take
+    
     res = []
-    
-    test = testc()
-    print test.name
-    
-    for rep in range(10):
+        
+    for rep in range(R):
         test = testc()
-        sample = [test_method(m, test.bounds, test.obj, N) for m in totest]
+        sample = [bc.test_method(m, test.bounds, test.obj, N) for m in totest]
         
         print 'iter', rep, sample
         
         res.append(sample)
     
+    print "Results for test ", test.name
     # print median score - more better
     print np.median(res, axis = 0)
     # print median deviation - less is better

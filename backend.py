@@ -13,7 +13,32 @@ from scipy.spatial.distance import pdist, squareform
 from scipy.optimize import minimize
 import heapq
 
-def spsz(bounds):
+def test_method(method, bounds, objective, N):
+    """
+    This tests how well certain optimization black box optimization method
+    optimizes certain objective func. w.r.t. given bounds and limit of N 
+    evaluations of the objective
+    """
+    
+    data = extend_data(None, None, None)
+    
+    for i in range(N):
+        choice, tosave = method(data, bounds)
+        #print choice
+        val = objective(choice)
+        data = extend_data(data, tosave, val)
+        
+        res = select_best(data)
+        print method.__name__, "iter", i, 'perf:', res[1]
+       
+        
+    res = select_best(data)
+    return res[1]    
+
+def space_size(bounds):
+    """ calculates total number of elements in space defined by bounds. 
+    Optimization for small search spaces.
+    """
     
     spacesize = 1
     
@@ -31,6 +56,10 @@ def spsz(bounds):
     
     return spacesize
 
+"""
+The code below is needed to manage observed values of objective
+"""
+
 def extend_data(data, point, value):
     if data is None:
         return [[None, -1e10]]
@@ -41,7 +70,7 @@ def select_best(data):
     i, _ = max(enumerate(data), key = lambda p: p[1][1])
     return data[i]
 
-def sel_rnd(bounds):
+def random_sample(bounds):
     choice = {}
         
     for n in bounds:
@@ -56,28 +85,30 @@ def sel_rnd(bounds):
     return choice
 
 def random_choice(data, bounds):
-    """Returns the next choice given pervious data and bounds
+    """Randomly sample element from space defined by bounds, until it is not one
+    of the previous samples stored in data array.
     """
     
-    if len(data) >= spsz(bounds):
+    if len(data) >= space_size(bounds):
         return None;
        
     choice = None
     
     while str(choice) in [str(d[0]) for d in data]:
-        choice = sel_rnd(bounds)
+        choice = random_sample(bounds)
     
     return choice, choice
 
 def genetic_choice(data, bounds):
-    """Returns the next choice given pervious data and bounds
+    """Selects small subset of the points with best objective value, and either
+    mix them or mutate them, and returns a result.
     """
     
-    if len(data) >= spsz(bounds):
+    if len(data) >= space_size(bounds):
         return None;
        
     choice = None
-    best = heapq.nlargest(5, data, key = lambda p: p[1])
+    best = heapq.nlargest(3, data, key = lambda p: p[1])
     
     while str(choice) in [str(d[0]) for d in data]:
         # generate choice           
@@ -90,18 +121,18 @@ def genetic_choice(data, bounds):
         else:
             # pick one random candidate and mutate it
             A = random.choice(best)[0]
-            B = sel_rnd(bounds)
+            B = random_sample(bounds)
         
         if A is None or B is None:
-            choice = sel_rnd(bounds)
+            choice = random_sample(bounds)
         else:
             choice = { k: random.choice([ A[k], B[k] ]) for k in A }
         
     return choice, choice
 
-### ==================== BO ======================
+### ==================== BO code. Madness starts here ======================
 
-def b_to_f(v, bounds):
+def to_features(v, bounds):
     x = []
     
     for n in bounds:
@@ -115,7 +146,7 @@ def b_to_f(v, bounds):
             
     return x
 
-def f_to_b(v, bounds):
+def from_features(v, bounds):
     x = {}
     idx = 0
     for n in bounds:
@@ -132,8 +163,8 @@ def f_to_b(v, bounds):
     return x
 
 def bound_rnd_feat(bounds):
-    v = sel_rnd(bounds)
-    return b_to_f(v, bounds)
+    v = random_sample(bounds)
+    return to_features(v, bounds)
 
 def lower_upper_bound(bounds):
     # generates bounds on feature values
@@ -144,9 +175,9 @@ def lower_upper_bound(bounds):
         lower[n]= b['bound'][0]
         upper[n]= b['bound'][-1]
     
-    return b_to_f(lower, bounds), b_to_f(upper, bounds)
+    return to_features(lower, bounds), to_features(upper, bounds)
 
-def fit_gp(X,Y,C):
+def fit_gauss_proc(X,Y,C):
     
     X = np.array(X)
     Y = np.array(Y)
@@ -162,7 +193,8 @@ def fit_gp(X,Y,C):
     
     return Kinv, Kf
 
-def prd_gp(X, Xp, Kinv, Kf, C):
+def predict_gauss_proc(X, Xp, Kinv, Kf, C):
+    
     m, d = [], []
     for x in Xp:
         sq_dist = np.sum( (X - x)**2 , axis = 1)
@@ -173,7 +205,7 @@ def prd_gp(X, Xp, Kinv, Kf, C):
         d.append(sg)
     return np.array(m), np.array(d)
 
-def gp_cvl(X,Y,C):
+def crossval_gauss_proc(X,Y,C):
     sp = len(X) / 2
     
     X = np.array(X)
@@ -182,27 +214,28 @@ def gp_cvl(X,Y,C):
     Xa, Xb = X[:sp], X[sp:]
     Ya, Yb = Y[:sp], Y[sp:]
     
-    Kinv, Kf = fit_gp(Xa, Ya, C)
-    Mb, _ = prd_gp(Xa, Xb, Kinv, Kf, C)
+    Kinv, Kf = fit_gauss_proc(Xa, Ya, C)
+    Mb, _ = predict_gauss_proc(Xa, Xb, Kinv, Kf, C)
     Sb = np.mean( (Yb - Mb) ** 2 )
     
-    Kinv, Kf = fit_gp(Xb, Yb, C)
-    Ma, _ = prd_gp(Xb, Xa, Kinv, Kf, C)
+    Kinv, Kf = fit_gauss_proc(Xb, Yb, C)
+    Ma, _ = predict_gauss_proc(Xb, Xa, Kinv, Kf, C)
     Sa = np.mean( (Ya - Ma) ** 2 )
     
     return np.mean([Sa, Sb])
     
 
-def sel_bo(X,Y,bounds):
+def fit_optimize_gauss_proc(X,Y,bounds):
     # trains guassian process model on the data
     # makes prediction for next input x to try
     
+    # fit GP
     Cs = []
     
     rng = 10**np.linspace(-3, 4, 100)
     
     for c in rng:
-        Cs.append( [gp_cvl(X, Y, c), c] )
+        Cs.append( [crossval_gauss_proc(X, Y, c), c] )
     
     i, _ = min( enumerate(Cs), key = lambda p: p[1][0] )
     
@@ -213,7 +246,7 @@ def sel_bo(X,Y,bounds):
     explore = (len(X) % 3) / 2.0
     #print explore, C
     
-    Kinv, Kf = fit_gp(X, Y, C)
+    Kinv, Kf = fit_gauss_proc(X, Y, C)
     
     # define exploration fnc
     def val(x): 
@@ -223,13 +256,14 @@ def sel_bo(X,Y,bounds):
         sg = 1 - np.dot(k, np.dot(Kinv, k))
         return -(mu + sg*explore) # we do maximization
     
-    
+    # get bounds for params values
     l,u = lower_upper_bound(bounds)
     X = np.array(X)
     
     bestv = -1e10;
     bestx = None;
     
+    # optimize starting from some random points
     for i in range(5):
     
         x0 = bound_rnd_feat(bounds)
@@ -239,9 +273,10 @@ def sel_bo(X,Y,bounds):
         x = sol.x
         f = val(x)
         
-        sng_ch1 = np.min( np.sum(np.abs(X - x), axis = 1) ) > 1e-2 
+        # this is needed to avoid num. problems with fitting GP to data later
+        check = np.min( np.sum(np.abs(X - x), axis = 1) ) > 1e-2 
         
-        if sng_ch1 and bestv < f:
+        if check and bestv < f:
             bestx = x
             bestv = f
     
@@ -251,25 +286,27 @@ def sel_bo(X,Y,bounds):
     return bestx
 
 def bayesian_choice(data, bounds):
+    # in few 1,2 iteration, simply choose boundary and center points.
+    # in later iterations, choose by optimizing 
 
     X = [v[0] for v in data if not v[0] is None]
     Y = [v[1] for v in data if not v[0] is None]
     
     if len(X) == 0:
         l,u = lower_upper_bound(bounds)
-        c = f_to_b(l, bounds)
+        c = from_features(l, bounds)
         return c, l
     
     if len(X) == 1:
         l,u = lower_upper_bound(bounds)
-        c = f_to_b([ lv*0.5 + uv*0.5 for lv, uv in zip(l,u) ], bounds)
+        c = from_features([ lv*0.5 + uv*0.5 for lv, uv in zip(l,u) ], bounds)
         return c, u
     
     x = None
     
     while str(x) in [str(d[0]) for d in data]:
-        x = sel_bo(X, Y, bounds)
+        x = fit_optimize_gauss_proc(X, Y, bounds)
         
-    return f_to_b(x, bounds), x.tolist()
+    return from_features(x, bounds), x.tolist()
 
     
